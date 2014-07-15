@@ -1,0 +1,13 @@
+.checklist {
+  margin: 0;
+}
+.checklist li {
+  list-style: none;
+}
+.checklist li span {
+  margin-left: -30px;
+  width: 30px;
+  display: block;
+  float: left;  /* LTR */
+  text-align: center;
+}

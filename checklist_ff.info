@@ -1,0 +1,6 @@
+name = Checklist Field Formatter
+description = "Provides a configurable field formatter for select lists."
+package = Fields
+dependencies[] = list
+stylesheets[all][] = checklist_ff.css
+core = 7.x

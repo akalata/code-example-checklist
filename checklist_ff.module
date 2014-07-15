@@ -1,0 +1,168 @@
+<?php
+
+/**
+ * @file
+ * Provides a checklist field formatter for list field types.
+ */
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function checklist_ff_field_formatter_info() {
+  return array(
+    'checklist' => array(
+      'label' => t('Displays items as checked or unchecked.'),
+      'field types' => array('list_text', 'list_float', 'list_integer'),
+      'settings' => array(
+        'check' => 'x',
+        'show_none_selected' => TRUE,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function checklist_ff_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $element = array();
+
+  switch ($display['type']) {
+    case 'checklist':
+      $element['check'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Check mark'),
+        '#description' => t('Symbol displayed to indicate a checked item.'),
+        '#default_value' => empty($settings['check']) ? 'x' : $settings['check'],
+      );
+      $element['show_none_selected'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Show if empty'),
+        '#description' => t('Show list even if no items are selected.'),
+        '#default_value' => empty($settings['show_none_selected']) ? 0 : $settings['show_none_selected'],
+      );
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function checklist_ff_field_formatter_settings_summary($field, $instance, $view_mode) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $summary = array();
+
+  switch ($display['type']) {
+    case 'checklist':
+      $summary[] = t('Check mark') . ': ' . $settings['check'];
+      $summary[] = t('Show if empty') . ': ' . ($settings['show_none_selected'] == 1 ? 'yes' : 'no');
+    break;
+  }
+
+  return implode('<br />', $summary) . '<br />';
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function checklist_ff_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+  switch ($display['type']) {
+    case 'checklist':
+      if (function_exists('i18n_field_type_info') && ($translate = i18n_field_type_info($field['type'], 'translate_options'))) {
+        $options = $translate($field);
+      } else {
+        $options = list_allowed_values($field);
+      }
+      foreach ($options as $key => $label) {
+        $checklist[$key] = array('data' => $label);
+      }
+      $i = 0;
+      if (count($items) > 0) {
+        foreach ($items as $item) {
+          $label = $checklist[$item['value']]['data'];
+          $checked = '<span>' . check_plain($display['settings']['check']) . '</span> ' . $label;
+          $checklist[$item['value']]['data'] = $checked;
+          $checklist[$item['value']]['class'] = array('checked');
+          $i++;
+        }
+      }
+
+      if ($i == 0) {
+        $checklist_class = 'checked-none';
+      } elseif ($i == count($checklist)) {
+        $checklist_class = 'checked-all';
+      } else {
+        $checklist_class = 'checked-' . $i;
+      }
+
+      $variables = array(
+        'items' => $checklist,
+        'title' => '',
+        'type' => 'ul',
+        'attributes' => array('class' => array('checklist', $checklist_class)),
+      );
+      $markup = theme('item_list', $variables);
+      $element[] = array(
+        '#markup' => $markup,
+      );
+      break;
+  }
+  return $element;
+}
+
+/**
+ * Implements hook_field_attach_view_alter().
+ *
+ * Overrides field view to show full list, even if no items are selected.
+ */
+function checklist_ff_field_attach_view_alter(&$output, $context) {
+  // Load all instances of the fields for the entity.
+  if (isset($context['entity_type']) && isset($context['entity']->type)) {
+    $instances = _field_invoke_get_instances($context['entity_type'], $context['entity']->type, array('default' => TRUE, 'deleted' => FALSE));
+    foreach ($instances as $field_name => $instance) {
+      // Set content for fields that are empty.
+      // substituting 'default' for $context['view_mode']
+      if (empty($context['entity']->{$field_name})) {
+        $display = field_get_display($instance, $context['view_mode'], $context['entity']);
+
+        // Do not add field that is hidden in current display.
+        if ($display['type'] == 'hidden') {
+          continue;
+        }
+
+        if ($display['type'] == 'checklist' && $display['settings']['show_none_selected'] == TRUE) {
+          // Load field settings.
+          $field = field_info_field($field_name);
+
+          // Get field options
+          $element = checklist_ff_field_formatter_view($context['entity_type'], $context['entity'], $field, $instance, NULL, array(), $display);
+
+          // Set output for field.
+          $output[$field_name] = array(
+            '#theme' => 'field',
+            '#title' => $instance['label'],
+            '#label_display' => $display['label'],
+            '#field_type' => $field['type'],
+            '#field_name' => $field_name,
+            '#bundle' => $context['entity']->type,
+            '#object' => $context['entity'],
+            '#items' => array(''),
+            '#entity_type' => $context['entity_type'],
+            '#weight' => $display['weight'],
+            $element[0],
+          );
+
+        } else {
+          //still getting field label printing, not sure why
+          unset($output[$field_name]);
+        }
+      }
+    }
+  }
+}
